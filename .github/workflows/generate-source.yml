@@ -20,14 +20,16 @@ jobs:
           distribution: temurin
           java-version: 21
 
-      - name: Generate sources
-        run: |
-          ./gradlew generateSource
+      - name: Show all Gradle tasks
+        run: ./gradlew tasks
+
+      - name: Try generate sources (modify to correct task if needed)
+        run: ./gradlew genSources
 
       - name: Upload generated sources
         if: success()
         uses: actions/upload-artifact@v4
         with:
           name: generated-sources
-          path: build/generated/
+          path: build/
           if-no-files-found: ignore

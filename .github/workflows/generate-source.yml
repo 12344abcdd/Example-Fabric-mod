@@ -23,7 +23,7 @@ jobs:
       - name: Show all Gradle tasks
         run: ./gradlew tasks
 
-      - name: Try generate sources (modify to correct task if needed)
+      - name: Generate Minecraft sources
         run: ./gradlew genSources
 
       - name: Upload generated sources

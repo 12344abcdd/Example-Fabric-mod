@@ -1,12 +1,12 @@
 name: Generate Source
 
-
 on:
   workflow_dispatch:
   push:
     branches:
       - main
       - master
+      - "1.21"
 
 jobs:
   auto-push:
@@ -16,7 +16,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           persist-credentials: true
-          fetch-depth: 0 # 允许 push
+          fetch-depth: 0
 
       - name: Set up JDK 21
         uses: actions/setup-java@v4
@@ -24,20 +24,8 @@ jobs:
           distribution: temurin
           java-version: 21
 
-      # 在这里可以插入你自己的构建、生成等脚本
-      # - name: Build or generate
-      #   run: ./gradlew genSources
-      
-      - name: Generate Minecraft sources
+      - name: Generate sources
         run: ./gradlew genSources
-
-      - name: Upload generated sources
-        if: success()
-        uses: actions/upload-artifact@v4
-        with:
-          name: generated-sources
-          path: build/
-          if-no-files-found: ignore
 
       - name: Commit and push all changes
         run: |

@@ -9,7 +9,7 @@ on:
       - "1.21"
 
 jobs:
-  auto-push:
+  Generate-Source:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository

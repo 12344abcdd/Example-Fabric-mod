@@ -32,7 +32,7 @@ jobs:
         run: |
           # 查找生成的Minecraft JAR文件
           echo "Searching for generated Minecraft JAR files..."
-          find . -name "*.jar" -path "*/build/*" | grep -i minecraft > jar-list.txt
+          find . -name "*.jar" -path ".gradle/*" | grep -i minecraft > jar-list.txt
           
           # 查找反编译的源代码目录
           find . -type d -name "mappings" -o -name "sources" | grep -E "(mappings|sources)" > source-dirs.txt

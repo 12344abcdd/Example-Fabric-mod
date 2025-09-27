@@ -1,0 +1,156 @@
+name: Generate and Push Source
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+      - master
+      - "1.21"
+
+jobs:
+  generate-source:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+          fetch-depth: 0
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Generate sources
+        run: ./gradlew genSources
+
+      - name: Find generated Minecraft JAR files
+        id: find-jars
+        run: |
+          # 查找生成的Minecraft JAR文件
+          echo "Searching for generated Minecraft JAR files..."
+          find . -name "*.jar" -path "*/build/*" | grep -i minecraft > jar-list.txt
+          
+          # 查找反编译的源代码目录
+          find . -type d -name "mappings" -o -name "sources" | grep -E "(mappings|sources)" > source-dirs.txt
+          
+          # 输出找到的文件和目录
+          echo "Found JAR files:"
+          cat jar-list.txt || echo "No JAR files found"
+          echo "Found source directories:"
+          cat source-dirs.txt || echo "No source directories found"
+          
+          # 保存到环境变量
+          echo "JAR_PATHS=$(cat jar-list.txt | tr '\n' ' ')" >> $GITHUB_OUTPUT
+          echo "SOURCE_DIRS=$(cat source-dirs.txt | tr '\n' ' ')" >> $GITHUB_OUTPUT
+
+      - name: Commit and push to current repo
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "No changes to commit."
+          else
+            git commit -m "chore: auto-commit generated sources and JARs [skip ci]"
+            git push
+          fi
+
+      - name: Extract and analyze generated files
+        run: |
+          # 列出所有生成的文件结构
+          echo "=== Generated files structure ==="
+          find . -name "build" -type d | head -5 | while read dir; do
+            echo "Directory: $dir"
+            find "$dir" -maxdepth 2 -type d | sort
+          done
+          
+          # 特别查找可能包含反编译代码的目录
+          echo "=== Potential decompiled source locations ==="
+          find . -type d -name "java" -path "*/sources/*" | head -10
+          find . -type d -name "minecraft" -path "*/src/*" | head -10
+
+      - name: Push to minecraft repository
+        run: |
+          # 克隆目标仓库
+          git clone https://${{ secrets.GITHUB_TOKEN }}@github.com/12344abcdd/minecraft.git minecraft-repo
+          cd minecraft-repo
+          
+          # 创建带时间戳的新分支
+          BRANCH_NAME="decompiled/$(date +%Y%m%d-%H%M%S)"
+          git checkout -b $BRANCH_NAME
+          
+          # 清理目标仓库（保留.git）
+          find . -maxdepth 1 ! -name '.git' ! -name '.' -exec rm -rf {} + 2>/dev/null || true
+          
+          # 从源仓库复制所有可能相关的文件
+          echo "Copying generated files..."
+          
+          # 复制反编译的Java源代码
+          if [ -d "../build/sources/main/java" ]; then
+            mkdir -p src/main/java
+            cp -r ../build/sources/main/java/* src/main/java/ 2>/dev/null || true
+          fi
+          
+          # 复制其他可能的源代码目录
+          for dir in ../build/*/main/java; do
+            if [ -d "$dir" ]; then
+              mkdir -p src/main/java
+              cp -r "$dir"/* src/main/java/ 2>/dev/null || true
+            fi
+          done
+          
+          # 复制生成的JAR文件
+          mkdir -p jars
+          find .. -name "*.jar" -path "*/build/*" -exec cp {} jars/ \; 2>/dev/null || true
+          
+          # 创建说明文件
+          cat > README.md << EOF
+          # Decompiled Minecraft Source
+          
+          This branch contains automatically decompiled Minecraft source code.
+          
+          Generated on: $(date)
+          Source repository: 12344abcdd/Example-Fabric-mod
+          Workflow run: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          
+          ## Contents
+          - Java source files in \`src/main/java/\`
+          - Generated JAR files in \`jars/\` directory
+          
+          ## File Structure
+          \`\`\`
+          $(find . -type f -name "*.java" | head -20 | sort)
+          \`\`\`
+          EOF
+          
+          # 提交到目标仓库
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "No changes to commit to minecraft repo."
+          else
+            git commit -m "feat: decompiled minecraft source and JARs - $(date)"
+            git push --set-upstream origin $BRANCH_NAME
+            echo "Pushed to branch: $BRANCH_NAME"
+          fi
+
+      - name: Create summary
+        run: |
+          echo "## Generation Summary" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Source generation completed" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Changes pushed to current repository" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Decompiled source pushed to minecraft repository" >> $GITHUB_STEP_SUMMARY
+          echo "- 📁 New branch created with timestamp" >> $GITHUB_STEP_SUMMARY
+          
+          # 显示找到的JAR文件
+          if [ -s jar-list.txt ]; then
+            echo "### Found JAR files:" >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            cat jar-list.txt >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+          fi

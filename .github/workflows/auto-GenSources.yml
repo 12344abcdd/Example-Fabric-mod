@@ -159,7 +159,7 @@ Source repository: ${{ github.repository }}
 
 Directory Structure:
 EOF
-          find . -type d | sort >> directory-structure.txt
+      #    find . -type d | sort >> directory-structure.txt
           
           echo "" >> directory-structure.txt
           echo "JAR Files:" >> directory-structure.txt

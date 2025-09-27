@@ -27,25 +27,62 @@ jobs:
       - name: Generate sources
         run: ./gradlew genSources
 
-      - name: Find generated Minecraft JAR files
-        id: find-jars
+      - name: Explore loom-cache directory
         run: |
-          # 查找生成的Minecraft JAR文件
-          echo "Searching for generated Minecraft JAR files..."
-          find . -name "*.jar" -path ".gradle/*" | grep -i minecraft > jar-list.txt
+          echo "=== Exploring .gradle/loom-cache ==="
+          if [ -d ".gradle/loom-cache" ]; then
+            echo "Loom cache directory structure:"
+            find .gradle/loom-cache -type d | sort
+            echo ""
+            echo "JAR files in loom-cache:"
+            find .gradle/loom-cache -name "*.jar" | sort
+            echo ""
+            echo "Minecraft-related files:"
+            find .gradle/loom-cache -name "*minecraft*" -o -name "*client*" -o -name "*server*" | sort
+          else
+            echo ".gradle/loom-cache directory not found"
+          fi
+
+      - name: Find generated files
+        id: find-files
+        run: |
+          # 查找JAR文件（现在知道在.gradle/loom-cache中）
+          echo "Searching for generated files..."
           
-          # 查找反编译的源代码目录
-          find . -type d -name "mappings" -o -name "sources" | grep -E "(mappings|sources)" > source-dirs.txt
+          # 查找JAR文件
+          find .gradle/loom-cache -name "*.jar" > jar-list.txt 2>/dev/null || true
           
-          # 输出找到的文件和目录
-          echo "Found JAR files:"
-          cat jar-list.txt || echo "No JAR files found"
-          echo "Found source directories:"
-          cat source-dirs.txt || echo "No source directories found"
+          # 查找反编译的源代码（通常在build目录）
+          find . -type d -name "sources" -path "*/build/*" > source-dirs.txt 2>/dev/null || true
+          find . -type d -name "java" -path "*/build/*" >> source-dirs.txt 2>/dev/null || true
           
-          # 保存到环境变量
-          echo "JAR_PATHS=$(cat jar-list.txt | tr '\n' ' ')" >> $GITHUB_OUTPUT
-          echo "SOURCE_DIRS=$(cat source-dirs.txt | tr '\n' ' ')" >> $GITHUB_OUTPUT
+          # 查找映射文件
+          find .gradle/loom-cache -name "mappings*" -type f > mapping-files.txt 2>/dev/null || true
+          
+          echo "=== JAR Files ==="
+          if [ -s jar-list.txt ]; then
+            cat jar-list.txt
+            JAR_COUNT=$(wc -l < jar-list.txt)
+            echo "Total JAR files found: $JAR_COUNT"
+          else
+            echo "No JAR files found"
+          fi
+          
+          echo "=== Source Directories ==="
+          if [ -s source-dirs.txt ]; then
+            cat source-dirs.txt
+            DIR_COUNT=$(wc -l < source-dirs.txt)
+            echo "Total source directories found: $DIR_COUNT"
+          else
+            echo "No source directories found"
+          fi
+          
+          echo "=== Mapping Files ==="
+          if [ -s mapping-files.txt ]; then
+            cat mapping-files.txt
+          else
+            echo "No mapping files found"
+          fi
 
       - name: Commit and push to current repo
         run: |
@@ -55,23 +92,9 @@ jobs:
           if git diff --cached --quiet; then
             echo "No changes to commit."
           else
-            git commit -m "chore: auto-commit generated sources and JARs [skip ci]"
+            git commit -m "chore: auto-commit generated sources and cache [skip ci]"
             git push
           fi
-
-      - name: Extract and analyze generated files
-        run: |
-          # 列出所有生成的文件结构
-          echo "=== Generated files structure ==="
-          find . -name "build" -type d | head -5 | while read dir; do
-            echo "Directory: $dir"
-            find "$dir" -maxdepth 2 -type d | sort
-          done
-          
-          # 特别查找可能包含反编译代码的目录
-          echo "=== Potential decompiled source locations ==="
-          find . -type d -name "java" -path "*/sources/*" | head -10
-          find . -type d -name "minecraft" -path "*/src/*" | head -10
 
       - name: Push to minecraft repository
         run: |
@@ -86,46 +109,99 @@ jobs:
           # 清理目标仓库（保留.git）
           find . -maxdepth 1 ! -name '.git' ! -name '.' -exec rm -rf {} + 2>/dev/null || true
           
-          # 从源仓库复制所有可能相关的文件
-          echo "Copying generated files..."
+          echo "Copying generated files from source repository..."
           
-          # 复制反编译的Java源代码
-          if [ -d "../build/sources/main/java" ]; then
-            mkdir -p src/main/java
-            cp -r ../build/sources/main/java/* src/main/java/ 2>/dev/null || true
+          # 创建目录结构
+          mkdir -p loom-cache
+          mkdir -p build-artifacts
+          mkdir -p src/main/java
+          
+          # 复制loom-cache中的JAR文件
+          if [ -d "../.gradle/loom-cache" ]; then
+            echo "Copying loom-cache contents..."
+            cp -r ../.gradle/loom-cache/* loom-cache/ 2>/dev/null || true
+            
+            # 特别复制JAR文件到显眼位置
+            find ../.gradle/loom-cache -name "*.jar" -exec cp {} . \; 2>/dev/null || true
+            mkdir -p jars
+            find ../.gradle/loom-cache -name "*.jar" -exec cp {} jars/ \; 2>/dev/null || true
           fi
           
-          # 复制其他可能的源代码目录
-          for dir in ../build/*/main/java; do
-            if [ -d "$dir" ]; then
-              mkdir -p src/main/java
-              cp -r "$dir"/* src/main/java/ 2>/dev/null || true
+          # 复制构建目录中的源代码
+          if [ -d "../build" ]; then
+            echo "Copying build artifacts..."
+            cp -r ../build/* build-artifacts/ 2>/dev/null || true
+            
+            # 复制反编译的Java源代码
+            if [ -d "../build/sources/main/java" ]; then
+              echo "Copying decompiled Java sources..."
+              cp -r ../build/sources/main/java/* src/main/java/ 2>/dev/null || true
             fi
-          done
+            
+            # 尝试其他可能的源代码位置
+            for java_dir in ../build/*/main/java; do
+              if [ -d "$java_dir" ]; then
+                echo "Copying Java sources from: $java_dir"
+                cp -r "$java_dir"/* src/main/java/ 2>/dev/null || true
+              fi
+            done
+          fi
           
-          # 复制生成的JAR文件
-          mkdir -p jars
-          find .. -name "*.jar" -path "*/build/*" -exec cp {} jars/ \; 2>/dev/null || true
+          # 复制gradle缓存中的映射文件
+          if [ -d "../.gradle" ]; then
+            find ../.gradle -name "mappings*" -type f -exec cp {} . \; 2>/dev/null || true
+          fi
           
-          # 创建说明文件
+          # 创建详细的目录结构文件
+          cat > directory-structure.txt << EOF
+Generated on: $(date)
+Source repository: ${{ github.repository }}
+
+Directory Structure:
+$(find . -type d | sort)
+
+JAR Files:
+$(find . -name "*.jar" | sort)
+
+Java Source Files:
+$(find . -name "*.java" | head -100 | sort)
+
+Mapping Files:
+$(find . -name "mappings*" | sort)
+EOF
+          
+          # 创建README
           cat > README.md << EOF
-          # Decompiled Minecraft Source
-          
-          This branch contains automatically decompiled Minecraft source code.
-          
-          Generated on: $(date)
-          Source repository: 12344abcdd/Example-Fabric-mod
-          Workflow run: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
-          
-          ## Contents
-          - Java source files in \`src/main/java/\`
-          - Generated JAR files in \`jars/\` directory
-          
-          ## File Structure
-          \`\`\`
-          $(find . -type f -name "*.java" | head -20 | sort)
-          \`\`\`
-          EOF
+# Minecraft Decompilation Results
+
+This branch contains automatically generated Minecraft decompilation artifacts.
+
+## 📁 Contents
+
+- **loom-cache/**: Fabric Loom cache files including Minecraft JARs
+- **jars/**: Minecraft client/server JAR files
+- **src/main/java/**: Decompiled Java source code
+- **build-artifacts/**: Gradle build outputs
+- **mapping files**: Obfuscation mapping files
+
+## 🔧 Generation Details
+
+- Generated: $(date)
+- Source: [12344abcdd/Example-Fabric-mod](https://github.com/12344abcdd/Example-Fabric-mod)
+- Workflow: [Run #${{ github.run_number }}](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})
+
+## 🗂️ File Locations
+
+- **Minecraft JARs**: \`.gradle/loom-cache/\`
+- **Decompiled Source**: \`build/sources/main/java/\`
+- **Mappings**: \`.gradle/loom-cache/mappings/\`
+
+## 📊 Statistics
+
+- JAR files: $(find . -name "*.jar" | wc -l)
+- Java files: $(find . -name "*.java" | wc -l)
+- Total size: $(du -sh . | cut -f1)
+EOF
           
           # 提交到目标仓库
           git config user.name "github-actions[bot]"
@@ -134,23 +210,37 @@ jobs:
           if git diff --cached --quiet; then
             echo "No changes to commit to minecraft repo."
           else
-            git commit -m "feat: decompiled minecraft source and JARs - $(date)"
+            git commit -m "feat: minecraft decompilation results - $(date +%Y%m%d-%H%M%S)"
             git push --set-upstream origin $BRANCH_NAME
-            echo "Pushed to branch: $BRANCH_NAME"
+            echo "✅ Successfully pushed to branch: $BRANCH_NAME"
+            
+            # 显示推送信息
+            echo "📦 Pushed contents:"
+            find . -type f -name "*.jar" -o -name "*.java" | head -10 | sort
           fi
 
-      - name: Create summary
+      - name: Create workflow summary
         run: |
-          echo "## Generation Summary" >> $GITHUB_STEP_SUMMARY
-          echo "- ✅ Source generation completed" >> $GITHUB_STEP_SUMMARY
-          echo "- ✅ Changes pushed to current repository" >> $GITHUB_STEP_SUMMARY
-          echo "- ✅ Decompiled source pushed to minecraft repository" >> $GITHUB_STEP_SUMMARY
-          echo "- 📁 New branch created with timestamp" >> $GITHUB_STEP_SUMMARY
+          echo "## 🎯 Minecraft Decompilation Complete" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
           
           # 显示找到的JAR文件
-          if [ -s jar-list.txt ]; then
-            echo "### Found JAR files:" >> $GITHUB_STEP_SUMMARY
+          if [ -f jar-list.txt ] && [ -s jar-list.txt ]; then
+            echo "### 📦 JAR Files Found ($(wc -l < jar-list.txt))" >> $GITHUB_STEP_SUMMARY
             echo '```' >> $GITHUB_STEP_SUMMARY
             cat jar-list.txt >> $GITHUB_STEP_SUMMARY
             echo '```' >> $GITHUB_STEP_SUMMARY
+          else
+            echo "### ❌ No JAR files found in loom-cache" >> $GITHUB_STEP_SUMMARY
           fi
+          
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 🔗 Results" >> $GITHUB_STEP_SUMMARY
+          echo "- **Source Repository:** [12344abcdd/Example-Fabric-mod](https://github.com/12344abcdd/Example-Fabric-mod)" >> $GITHUB_STEP_SUMMARY
+          echo "- **Target Branch:** [12344abcdd/minecraft/tree/decompiled/$(date +%Y%m%d-%H%M%S)](https://github.com/12344abcdd/minecraft/tree/decompiled/$(date +%Y%m%d-%H%M%S))" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 📁 Artifacts Included" >> $GITHUB_STEP_SUMMARY
+          echo "- Minecraft JAR files from \`.gradle/loom-cache/\`" >> $GITHUB_STEP_SUMMARY
+          echo "- Decompiled Java source code" >> $GITHUB_STEP_SUMMARY
+          echo "- Mapping files" >> $GITHUB_STEP_SUMMARY
+          echo "- Build artifacts" >> $GITHUB_STEP_SUMMARY

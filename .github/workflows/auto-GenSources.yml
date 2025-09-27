@@ -152,56 +152,60 @@ jobs:
             find ../.gradle -name "mappings*" -type f -exec cp {} . \; 2>/dev/null || true
           fi
           
-          # 创建详细的目录结构文件
-          cat > directory-structure.txt << EOF
+          # 创建目录结构文件（使用简单的格式避免转义问题）
+          cat > directory-structure.txt << 'EOF'
 Generated on: $(date)
 Source repository: ${{ github.repository }}
 
 Directory Structure:
-$(find . -type d | sort)
-
-JAR Files:
-$(find . -name "*.jar" | sort)
-
-Java Source Files:
-$(find . -name "*.java" | head -100 | sort)
-
-Mapping Files:
-$(find . -name "mappings*" | sort)
 EOF
+          find . -type d | sort >> directory-structure.txt
           
-          # 创建README
-          cat > README.md << EOF
+          echo "" >> directory-structure.txt
+          echo "JAR Files:" >> directory-structure.txt
+          find . -name "*.jar" | sort >> directory-structure.txt
+          
+          echo "" >> directory-structure.txt
+          echo "Java Source Files (first 100):" >> directory-structure.txt
+          find . -name "*.java" | head -100 | sort >> directory-structure.txt
+          
+          echo "" >> directory-structure.txt
+          echo "Mapping Files:" >> directory-structure.txt
+          find . -name "mappings*" | sort >> directory-structure.txt
+          
+          # 创建README（使用简单的格式）
+          cat > README.md << 'EOF'
 # Minecraft Decompilation Results
 
 This branch contains automatically generated Minecraft decompilation artifacts.
 
-## 📁 Contents
+## Contents
 
 - **loom-cache/**: Fabric Loom cache files including Minecraft JARs
-- **jars/**: Minecraft client/server JAR files
+- **jars/**: Minecraft client/server JAR files  
 - **src/main/java/**: Decompiled Java source code
 - **build-artifacts/**: Gradle build outputs
 - **mapping files**: Obfuscation mapping files
 
-## 🔧 Generation Details
+## Generation Details
 
 - Generated: $(date)
 - Source: [12344abcdd/Example-Fabric-mod](https://github.com/12344abcdd/Example-Fabric-mod)
 - Workflow: [Run #${{ github.run_number }}](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})
 
-## 🗂️ File Locations
+## File Locations
 
-- **Minecraft JARs**: \`.gradle/loom-cache/\`
-- **Decompiled Source**: \`build/sources/main/java/\`
-- **Mappings**: \`.gradle/loom-cache/mappings/\`
-
-## 📊 Statistics
-
-- JAR files: $(find . -name "*.jar" | wc -l)
-- Java files: $(find . -name "*.java" | wc -l)
-- Total size: $(du -sh . | cut -f1)
+- **Minecraft JARs**: `.gradle/loom-cache/`
+- **Decompiled Source**: `build/sources/main/java/`
+- **Mappings**: `.gradle/loom-cache/mappings/`
 EOF
+          
+          # 添加统计信息到README
+          echo "" >> README.md
+          echo "## Statistics" >> README.md
+          echo "- JAR files: $(find . -name "*.jar" | wc -l)" >> README.md
+          echo "- Java files: $(find . -name "*.java" | wc -l)" >> README.md
+          echo "- Total size: $(du -sh . | cut -f1)" >> README.md
           
           # 提交到目标仓库
           git config user.name "github-actions[bot]"
@@ -240,7 +244,7 @@ EOF
           echo "- **Target Branch:** [12344abcdd/minecraft/tree/decompiled/$(date +%Y%m%d-%H%M%S)](https://github.com/12344abcdd/minecraft/tree/decompiled/$(date +%Y%m%d-%H%M%S))" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### 📁 Artifacts Included" >> $GITHUB_STEP_SUMMARY
-          echo "- Minecraft JAR files from \`.gradle/loom-cache/\`" >> $GITHUB_STEP_SUMMARY
+          echo "- Minecraft JAR files from `.gradle/loom-cache/`" >> $GITHUB_STEP_SUMMARY
           echo "- Decompiled Java source code" >> $GITHUB_STEP_SUMMARY
           echo "- Mapping files" >> $GITHUB_STEP_SUMMARY
           echo "- Build artifacts" >> $GITHUB_STEP_SUMMARY

@@ -38,3 +38,43 @@ jobs:
             git commit -m "chore: auto-commit all changes [skip ci]"
             git push
           fi
+
+  Decompile-And-Push:
+    runs-on: ubuntu-latest
+    needs: Generate-Source
+    steps:
+      - name: Checkout source repo
+        uses: actions/checkout@v4
+
+      - name: Download CFR Decompiler
+        run: wget https://github.com/leibnitz27/cfr/releases/download/0.152/cfr-0.152.jar
+
+      - name: Decompile Minecraft Common Jar
+        run: |
+          mkdir decompiled
+          java -jar cfr-0.152.jar ".gradle/loom-cache/minecraftMaven/net/minecraft/minecraft-common-48f5f74c97/1.21.1-net.fabricmc.yarn.1_21_1.1.21.1+build.3-v2/minecraft-common-48f5f74c97-1.21.1-net.fabricmc.yarn.1_21_1.1.21.1+build.3-v2.jar" --outputdir decompiled
+
+      - name: Checkout target minecraft repo
+        uses: actions/checkout@v4
+        with:
+          repository: 12344abcdd/minecraft
+          token: ${{ secrets.GITHUB_TOKEN }}
+          ref: 1.21.1-net.fabricmc.yarn.1_21_1.1.21.1+build.3-v2-common
+          path: mc_repo
+
+      - name: Copy Decompiled Source
+        run: |
+          cp -r decompiled/* mc_repo/
+
+      - name: Commit and Push Decompiled Source
+        run: |
+          cd mc_repo
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git add .
+          if git diff --cached --quiet; then
+            echo "No changes to commit."
+          else
+            git commit -m "Decompiled Minecraft common jar for 1.21.1-net.fabricmc.yarn.1_21_1.1.21.1+build.3-v2-common"
+            git push origin HEAD:1.21.1-net.fabricmc.yarn.1_21_1.1.21.1+build.3-v2-common
+          fi

@@ -58,7 +58,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: 12344abcdd/minecraft
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.PAT }}
           ref: 1.21.1-net.fabricmc.yarn.1_21_1.1.21.1+build.3-v2-common
           path: mc_repo
 

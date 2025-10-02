@@ -54,7 +54,18 @@ jobs:
         run: |
           mkdir decompiled
           java -jar cfr-0.152.jar ".gradle/loom-cache/minecraftMaven/net/minecraft/minecraft-common-48f5f74c97/1.21.1-net.fabricmc.yarn.1_21_1.1.21.1+build.3-v2/minecraft-common-48f5f74c97-1.21.1-net.fabricmc.yarn.1_21_1.1.21.1+build.3-v2.jar" --outputdir decompiled
-
+          
+      - name: Parse Minecraft version and yarn build from gradle.properties
+        id: parse_version
+        run: |
+          MC_VERSION=$(grep '^minecraft_version=' gradle.properties | cut -d'=' -f2)
+          YARN_RAW=$(grep '^yarn_mappings=' gradle.properties | cut -d'=' -f2)
+          # 格式化 yarn 为 net.fabricmc.yarn.1_21_1.1.21.1+build.3
+          YARN_FORMAT="net.fabricmc.yarn.${MC_VERSION//./_}.${YARN_RAW}"
+          BRANCH="${MC_VERSION}-${YARN_FORMAT}-common"
+          echo "branch=$BRANCH" >> $GITHUB_OUTPUT
+          echo "Branch name: $BRANCH"
+          
       - name: Checkout target minecraft repo
         uses: actions/checkout@v4
         with:
@@ -73,8 +84,7 @@ jobs:
           cd mc_repo
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          BRANCH="1.21.1-net.fabricmc.yarn.1_21_1.1.21.1+build.3-v2-common"
-          # 如果远程分支不存在，则新建分支
+          BRANCH="${{ steps.parse_version.outputs.branch }}"
           if ! git ls-remote --exit-code origin refs/heads/$BRANCH; then
             git checkout -b $BRANCH
           else

@@ -39,6 +39,7 @@ jobs:
             git push
           fi
 
+
   Decompile-And-Push:
     runs-on: ubuntu-latest
     needs: Generate-Source
@@ -59,22 +60,31 @@ jobs:
         with:
           repository: 12344abcdd/minecraft
           token: ${{ secrets.PAT }}
-          ref: 1.21.1-net.fabricmc.yarn.1_21_1.1.21.1+build.3-v2-common
+          # 使用 main 分支检出，后续脚本处理分支创建
+          ref: main
           path: mc_repo
 
       - name: Copy Decompiled Source
         run: |
           cp -r decompiled/* mc_repo/
 
-      - name: Commit and Push Decompiled Source
+      - name: Create branch if not exist, commit and push
         run: |
           cd mc_repo
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          BRANCH="1.21.1-net.fabricmc.yarn.1_21_1.1.21.1+build.3-v2-common"
+          # 如果远程分支不存在，则新建分支
+          if ! git ls-remote --exit-code origin refs/heads/$BRANCH; then
+            git checkout -b $BRANCH
+          else
+            git fetch origin $BRANCH:$BRANCH
+            git checkout $BRANCH
+          fi
           git add .
           if git diff --cached --quiet; then
             echo "No changes to commit."
           else
-            git commit -m "Decompiled Minecraft common jar for 1.21.1-net.fabricmc.yarn.1_21_1.1.21.1+build.3-v2-common"
-            git push origin HEAD:1.21.1-net.fabricmc.yarn.1_21_1.1.21.1+build.3-v2-common
+            git commit -m "Decompiled Minecraft common jar for $BRANCH"
+            git push origin HEAD:$BRANCH
           fi

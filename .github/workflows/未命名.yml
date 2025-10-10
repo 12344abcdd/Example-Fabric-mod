@@ -1,0 +1,158 @@
+name: Generate and Decompile Minecraft Jars
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+      - master
+      - "1.21"
+
+jobs:
+  Generate-Source:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+          fetch-depth: 0
+
+      - name: Cache Gradle files
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+            .gradle/loom-cache
+          key: gradle-${{ runner.os }}-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties', 'gradle.properties') }}
+          restore-keys: |
+            gradle-${{ runner.os }}-
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Generate sources
+        run: ./gradlew genSources --no-daemon --parallel
+
+      - name: Commit and push all changes
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "No changes to commit."
+          else
+            git commit -m "chore: auto-commit all changes [skip ci]"
+            git push
+          fi
+
+  Decompile-And-Push:
+    runs-on: ubuntu-latest
+    needs: Generate-Source
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Parse Minecraft version and yarn build from gradle.properties
+        id: parse_version
+        run: |
+          MC_VERSION=$(grep '^minecraft_version=' gradle.properties | cut -d'=' -f2)
+          YARN_RAW=$(grep '^yarn_mappings=' gradle.properties | cut -d'=' -f2)
+          # 格式化 yarn
+          YARN_FORMAT="net.fabricmc.yarn.${MC_VERSION//./_}.${YARN_RAW}"
+          # 生成common分支名
+          COMMON_BRANCH="${MC_VERSION}-${YARN_FORMAT}-common"
+          # 生成client分支名
+          CLIENT_BRANCH="${MC_VERSION}-${YARN_FORMAT}-client"
+          echo "common_branch=$COMMON_BRANCH" >> $GITHUB_OUTPUT
+          echo "client_branch=$CLIENT_BRANCH" >> $GITHUB_OUTPUT
+          echo "Common Branch name: $COMMON_BRANCH"
+          echo "Client Branch name: $CLIENT_BRANCH"
+          # 生成jar路径
+          COMMON_JAR_PATH=".gradle/loom-cache/minecraftMaven/net/minecraft/minecraft-common-*/${MC_VERSION}-net.fabricmc.yarn.${MC_VERSION//./_}.${YARN_RAW}-v2/minecraft-common-*-${MC_VERSION}-net.fabricmc.yarn.${MC_VERSION//./_}.${YARN_RAW}-v2.jar"
+          CLIENT_JAR_PATH=".gradle/loom-cache/minecraftMaven/net/minecraft/minecraft-client-*/${MC_VERSION}-net.fabricmc.yarn.${MC_VERSION//./_}.${YARN_RAW}-v2/minecraft-client-*-${MC_VERSION}-net.fabricmc.yarn.${MC_VERSION//./_}.${YARN_RAW}-v2.jar"
+          echo "common_jar_path=$COMMON_JAR_PATH" >> $GITHUB_OUTPUT
+          echo "client_jar_path=$CLIENT_JAR_PATH" >> $GITHUB_OUTPUT
+          echo "Common Jar path: $COMMON_JAR_PATH"
+          echo "Client Jar path: $CLIENT_JAR_PATH"
+
+      - name: Download CFR Decompiler
+        run: wget https://github.com/leibnitz27/cfr/releases/download/0.152/cfr-0.152.jar
+
+      - name: Find and decompile Minecraft Jars
+        run: |
+          # 创建 decompiled 目录
+          mkdir -p decompiled/common decompiled/client
+          
+          # 处理 common jar
+          COMMON_JAR=$(ls ${{ steps.parse_version.outputs.common_jar_path }} | head -n 1)
+          echo "Actual common jar: $COMMON_JAR"
+          java -jar cfr-0.152.jar "$COMMON_JAR" --outputdir decompiled/common
+          
+          # 处理 client jar
+          CLIENT_JAR=$(ls ${{ steps.parse_version.outputs.client_jar_path }} | head -n 1)
+          echo "Actual client jar: $CLIENT_JAR"
+          java -jar cfr-0.152.jar "$CLIENT_JAR" --outputdir decompiled/client
+
+      - name: Checkout target minecraft repo
+        uses: actions/checkout@v4
+        with:
+          repository: 12344abcdd/minecraft
+          token: ${{ secrets.PAT }}
+          path: mc_repo
+
+      - name: Push Common Sources
+        run: |
+          cd mc_repo
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          BRANCH="${{ steps.parse_version.outputs.common_branch }}"
+          
+          # 处理分支
+          if ! git ls-remote --exit-code origin "refs/heads/$BRANCH"; then
+            git checkout -b "$BRANCH"
+          else
+            git fetch origin "$BRANCH:$BRANCH"
+            git checkout "$BRANCH"
+          fi
+          
+          # 复制common代码并提交
+          rm -rf *
+          cp -r ../decompiled/common/* .
+          git add .
+          if git diff --cached --quiet; then
+            echo "No common changes to commit."
+          else
+            git commit -m "Decompiled Minecraft common jar for $BRANCH"
+            git push origin HEAD:"$BRANCH"
+          fi
+
+      - name: Push Client Sources
+        run: |
+          cd mc_repo
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          BRANCH="${{ steps.parse_version.outputs.client_branch }}"
+          
+          # 处理分支
+          if ! git ls-remote --exit-code origin "refs/heads/$BRANCH"; then
+            git checkout -b "$BRANCH"
+          else
+            git fetch origin "$BRANCH:$BRANCH"
+            git checkout "$BRANCH"
+          fi
+          
+          # 复制client代码并提交
+          rm -rf *
+          cp -r ../decompiled/client/* .
+          git add .
+          if git diff --cached --quiet; then
+            echo "No client changes to commit."
+          else
+            git commit -m "Decompiled Minecraft client jar for $BRANCH"
+            git push origin HEAD:"$BRANCH"
+          fi

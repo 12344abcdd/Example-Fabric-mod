@@ -112,5 +112,6 @@ jobs:
             echo "No changes to commit."
           else
             git commit -m "Extracted Minecraft common sources jar for $BRANCH"
-            git push origin HEAD:"$BRANCH"
+            CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
+            git push origin "$CURRENT_BRANCH:$CURRENT_BRANCH"
           fi

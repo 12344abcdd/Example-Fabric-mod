@@ -111,15 +111,17 @@ jobs:
 
       - name: Copy Extracted Source
         run: |
-          cp -r extracted_sources/* mc_repo/
+          cp -r ../extracted_sources/* ./
 
       - name: Copy Extracted Non-class Files (from jar)
         run: |
-          cp -rn extracted_nonclass/* mc_repo/
+          cp -r ../extracted_nonclass/* ./
+          echo "=== Copied resource files ==="
+          find . -type f | grep -E 'assets/|data/|META-INF/' || echo "No resource files found"
 
       - name: Commit and push
         run: |
-          git add .
+          git add -f .
           if git diff --cached --quiet; then
             echo "No changes to commit."
           else

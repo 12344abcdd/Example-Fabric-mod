@@ -2,6 +2,7 @@ name: Generate and Extract Minecraft Common Sources Jar
 
 on:
   workflow_dispatch:
+  push:
 
 jobs:
   Generate-Source:

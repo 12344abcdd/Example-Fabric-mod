@@ -38,6 +38,9 @@ jobs:
       - name: Generate sources
         run: ./gradlew genSources --no-daemon --parallel
 
+      - name: Generate sources jar
+        run: ./gradlew sourcesJar --no-daemon --parallel
+
       - name: Commit and push all changes
         run: |
           git config --global user.name "github-actions[bot]"
@@ -66,17 +69,17 @@ jobs:
           BRANCH="${MC_VERSION}-${YARN_FORMAT}-common"
           echo "branch=$BRANCH" >> $GITHUB_OUTPUT
           echo "Branch name: $BRANCH"
-          # 生成 source jar 路径（适配 loom 默认缓存结构）
-          SOURCE_JAR_PATH=".gradle/loom-cache/minecraftMaven/net/minecraft/minecraft-common-*/${MC_VERSION}-net.fabricmc.yarn.${MC_VERSION//./_}.${YARN_RAW}-v2/minecraft-common-*-${MC_VERSION}-net.fabricmc.yarn.${MC_VERSION//./_}.${YARN_RAW}-sources.jar"
-          echo "source_jar_path=$SOURCE_JAR_PATH" >> $GITHUB_OUTPUT
-          echo "Source jar path: $SOURCE_JAR_PATH"
+
+      - name: List all sources jars (debug)
+        run: find . -name "*-sources.jar"
 
       - name: Find and extract Minecraft Common Sources Jar
         run: |
-          mkdir extracted_sources
-          ACTUAL_SOURCE_JAR=$(ls ${{ steps.parse_version.outputs.source_jar_path }} | head -n 1)
-          echo "Actual source jar: $ACTUAL_SOURCE_JAR"
-          unzip -q "$ACTUAL_SOURCE_JAR" -d extracted_sources
+          mkdir -p extracted_sources
+          # 自动查找第一个 sources.jar
+          SOURCE_JAR=$(find . -name "*-sources.jar" | head -n 1)
+          echo "Actual source jar: $SOURCE_JAR"
+          unzip -q "$SOURCE_JAR" -d extracted_sources
 
       - name: Checkout target minecraft repo
         uses: actions/checkout@v4

@@ -109,15 +109,25 @@ jobs:
             git checkout "$BRANCH"
           fi
 
+      - name: Find and extract Minecraft Common Sources Jar
+        run: |
+          mkdir -p extracted_sources
+          SOURCE_JAR=$(find . -name "*-sources.jar" | head -n 1)
+          echo "Actual source jar: $SOURCE_JAR"
+          unzip -q "$SOURCE_JAR" -d extracted_sources
+          echo "解压后内容："
+          ls -al extracted_sources
+
+      - name: Checkout target minecraft repo
+        uses: actions/checkout@v4
+        with:
+          repository: 12344abcdd/minecraft
+          token: ${{ secrets.PAT }}
+          path: mc_repo
+
       - name: Copy Extracted Source
         run: |
-          cp -r ../extracted_sources/* ./
-
-      - name: Copy Extracted Non-class Files (from jar)
-        run: |
-          cp -r ../extracted_nonclass/* ./
-          echo "=== Copied resource files ==="
-          find . -type f | grep -E 'assets/|data/|META-INF/' || echo "No resource files found"
+          cp -r extracted_sources/* mc_repo/
 
       - name: Commit and push
         run: |

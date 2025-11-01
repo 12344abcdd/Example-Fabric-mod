@@ -110,11 +110,11 @@ jobs:
 
       - name: Copy Extracted Source
         run: |
-          cp -r ../extracted_sources/* ./
+          cp -r extracted_sources/* mc_repo/
 
       - name: Copy Extracted Non-class Files (from jar)
         run: |
-          cp -rn ../extracted_nonclass/* ./
+          cp -rn extracted_nonclass/* mc_repo/
 
       - name: Commit and push
         run: |

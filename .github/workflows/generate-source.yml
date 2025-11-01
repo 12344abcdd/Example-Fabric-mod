@@ -71,23 +71,29 @@ jobs:
 
       - name: Find and extract Minecraft Common Sources Jar
         run: |
+          rm -rf extracted_sources
           mkdir -p extracted_sources
           SOURCE_JAR=$(find . -name "*-sources.jar" | head -n 1)
           echo "Actual source jar: $SOURCE_JAR"
-          unzip -q "$SOURCE_JAR" -d extracted_sources
+          unzip -oq "$SOURCE_JAR" -d extracted_sources
+          echo "解压后内容："
+          ls -al extracted_sources || true
 
       - name: Find and extract Minecraft Common Jar (non-class files)
         run: |
+          rm -rf extracted_nonclass
           mkdir -p extracted_nonclass
           JAR_FILE=$(find . -name "minecraft-common-*.jar" ! -name "*-sources.jar" | head -n 1)
           echo "Actual jar: $JAR_FILE"
           if [ -n "$JAR_FILE" ]; then
-            unzip -q "$JAR_FILE" -d extracted_nonclass
+            unzip -oq "$JAR_FILE" -d extracted_nonclass
             find extracted_nonclass -type f -name "*.class" -delete
           else
             echo "No minecraft-common-*.jar found!"
             exit 1
           fi
+          echo "非class文件解压后内容："
+          find extracted_nonclass | head -50
 
       - name: Checkout target minecraft repo
         uses: actions/checkout@v4
@@ -109,25 +115,17 @@ jobs:
             git checkout "$BRANCH"
           fi
 
-      - name: Find and extract Minecraft Common Sources Jar
-        run: |
-          mkdir -p extracted_sources
-          SOURCE_JAR=$(find . -name "*-sources.jar" | head -n 1)
-          echo "Actual source jar: $SOURCE_JAR"
-          unzip -q "$SOURCE_JAR" -d extracted_sources
-          echo "解压后内容："
-          ls -al extracted_sources
-
-      - name: Checkout target minecraft repo
-        uses: actions/checkout@v4
-        with:
-          repository: 12344abcdd/minecraft
-          token: ${{ secrets.PAT }}
-          path: mc_repo
-
       - name: Copy Extracted Source
         run: |
-          cp -r extracted_sources/* mc_repo/
+          cp -r ../extracted_sources/* ./
+          echo "=== 源码文件复制后 ==="
+          find . -type f | head -50
+
+      - name: Copy Extracted Non-class Files (from jar)
+        run: |
+          cp -r ../extracted_nonclass/* ./
+          echo "=== 资源文件复制后 ==="
+          find . -type f | grep -E 'assets/|data/|META-INF/' || echo "No resource files found"
 
       - name: Commit and push
         run: |

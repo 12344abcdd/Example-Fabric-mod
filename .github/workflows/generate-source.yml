@@ -2,11 +2,6 @@ name: Generate and Extract Minecraft Common Sources Jar
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - main
-      - master
-      - "1.21"
 
 jobs:
   Generate-Source:
@@ -80,6 +75,22 @@ jobs:
           echo "Actual source jar: $SOURCE_JAR"
           unzip -q "$SOURCE_JAR" -d extracted_sources
 
+      - name: Find and extract Minecraft Common Jar (resources)
+        run: |
+          mkdir -p extracted_resources
+          # 查找不带 sources 的 minecraft-common jar
+          JAR_FILE=$(find . -name "minecraft-common-*.jar" ! -name "*-sources.jar" | head -n 1)
+          echo "Actual common jar: $JAR_FILE"
+          # 排除 .class 和 .java 文件，提取资源文件
+          if [ -n "$JAR_FILE" ]; then
+            unzip -q "$JAR_FILE" -d extracted_resources
+            # 删除所有 .class 和 .java 文件，仅保留资源
+            find extracted_resources -type f \( -name "*.class" -o -name "*.java" \) -delete
+          else
+            echo "No minecraft-common-*.jar found!"
+            exit 1
+          fi
+
       - name: Checkout target minecraft repo
         uses: actions/checkout@v4
         with:
@@ -104,6 +115,10 @@ jobs:
         run: |
           cp -r extracted_sources/* mc_repo/
 
+      - name: Copy Extracted Resources (from jar)
+        run: |
+          cp -rn extracted_resources/* mc_repo/ || true
+
       - name: Commit and push
         run: |
           cd mc_repo
@@ -111,7 +126,7 @@ jobs:
           if git diff --cached --quiet; then
             echo "No changes to commit."
           else
-            git commit -m "Extracted Minecraft common sources jar for $BRANCH"
+            git commit -m "Extracted Minecraft common sources jar and resources for $BRANCH"
             CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
             git push origin "$CURRENT_BRANCH:$CURRENT_BRANCH"
           fi

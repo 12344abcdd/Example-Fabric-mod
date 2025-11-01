@@ -76,7 +76,6 @@ jobs:
       - name: Find and extract Minecraft Common Sources Jar
         run: |
           mkdir -p extracted_sources
-          # 自动查找第一个 sources.jar
           SOURCE_JAR=$(find . -name "*-sources.jar" | head -n 1)
           echo "Actual source jar: $SOURCE_JAR"
           unzip -q "$SOURCE_JAR" -d extracted_sources
@@ -88,11 +87,7 @@ jobs:
           token: ${{ secrets.PAT }}
           path: mc_repo
 
-      - name: Copy Extracted Source
-        run: |
-          cp -r extracted_sources/* mc_repo/
-
-      - name: Create branch if not exist, commit and push
+      - name: Create branch if not exist and checkout
         run: |
           cd mc_repo
           git config --global user.name "github-actions[bot]"
@@ -104,6 +99,14 @@ jobs:
             git fetch origin "$BRANCH:$BRANCH"
             git checkout "$BRANCH"
           fi
+
+      - name: Copy Extracted Source
+        run: |
+          cp -r extracted_sources/* mc_repo/
+
+      - name: Commit and push
+        run: |
+          cd mc_repo
           git add .
           if git diff --cached --quiet; then
             echo "No changes to commit."

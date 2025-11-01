@@ -1,0 +1,16 @@
+name: Clean Loom Cache (Manual)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  clean-loom-cache:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Remove all files in .gradle/loom-cache
+        run: |
+          rm -rf .gradle/loom-cache/*
+          echo ".gradle/loom-cache/* has been cleaned."
